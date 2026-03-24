@@ -73,7 +73,6 @@
     .stat-value { font-size: 1.75rem; font-weight: 700; color: white; line-height: 1.1; }
     .stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 4px;
                   text-transform: uppercase; letter-spacing: 0.05em; }
-    .mpg-great { color: #34d399; }
     .mpg-good  { color: #4ade80; }
     .mpg-ok    { color: #facc15; }
     .mpg-low   { color: #f87171; }
@@ -346,15 +345,13 @@
     }
     function mpgClass(mpg) {
       if (mpg === null) return '';
-      if (mpg >= 50) return 'mpg-great';
-      if (mpg >= 44) return 'mpg-good';
+      if (mpg > 40) return 'mpg-good';
       if (mpg >= 38) return 'mpg-ok';
       return 'mpg-low';
     }
     function borderColor(mpg) {
       if (mpg === null) return 'rgba(255,255,255,0.15)';
-      if (mpg >= 50) return '#34d399';
-      if (mpg >= 44) return '#4ade80';
+      if (mpg > 40) return '#4ade80';
       if (mpg >= 38) return '#facc15';
       return '#f87171';
     }
@@ -455,7 +452,7 @@
             <div class="stat-label">Average MPG</div>
           </div>
           <div class="stat-card">
-            <div class="stat-value mpg-great">${fmt(bestMpg)}</div>
+            <div class="stat-value mpg-good">${fmt(bestMpg)}</div>
             <div class="stat-label">Best MPG</div>
           </div>
           <div class="stat-card">
