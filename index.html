@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="2012 Prius V gas mileage tracker">
+  <meta name="theme-color" content="#1e3a5f">
+  <title>Prius V Gas Log</title>
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gas Log">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    body {
+      background: linear-gradient(to bottom right, #1e3a5f, #1e4d6b, #0f4c75);
+      min-height: 100vh;
+    }
+    .card {
+      background: rgba(255,255,255,0.10);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    input {
+      background: rgba(255,255,255,0.12) !important;
+      border: 1px solid rgba(255,255,255,0.25) !important;
+      color: white !important;
+      border-radius: 6px;
+      padding: 8px 10px;
+      width: 100%;
+      font-size: 16px;
+    }
+    input::placeholder { color: rgba(255,255,255,0.4); }
+    input:focus { outline: none; border-color: rgba(255,255,255,0.6) !important; }
+    label { font-size: 0.75rem; color: rgba(255,255,255,0.65); display: block; margin-bottom: 4px; }
+    .btn-primary {
+      background: #2563eb; color: white; border: none;
+      padding: 10px 20px; border-radius: 8px; font-size: 0.9rem;
+      cursor: pointer; font-weight: 600; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary {
+      background: rgba(255,255,255,0.12); color: white;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 8px 16px; border-radius: 8px; font-size: 0.85rem;
+      cursor: pointer; font-weight: 500; transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+    .btn-danger {
+      background: rgba(220,38,38,0.25); color: #fca5a5;
+      border: 1px solid rgba(220,38,38,0.35);
+      padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer;
+    }
+    .btn-danger:hover { background: rgba(220,38,38,0.45); }
+    .tab-btn {
+      padding: 8px 18px; border-radius: 8px; font-size: 0.85rem;
+      cursor: pointer; border: none; font-weight: 500; transition: all 0.2s;
+      color: rgba(255,255,255,0.55); background: transparent;
+    }
+    .tab-btn.active { background: #2563eb; color: white; }
+    .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.1); color: white; }
+    .stat-card {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px; padding: 16px; text-align: center;
+    }
+    .stat-value { font-size: 1.75rem; font-weight: 700; color: white; line-height: 1.1; }
+    .stat-label { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 4px;
+                  text-transform: uppercase; letter-spacing: 0.05em; }
+    .mpg-great { color: #34d399; }
+    .mpg-good  { color: #4ade80; }
+    .mpg-ok    { color: #facc15; }
+    .mpg-low   { color: #f87171; }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 20px;
+    }
+    .modal-box {
+      background: #1a3554; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 16px; padding: 24px; width: 100%; max-width: 420px;
+    }
+    .toast {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: #16a34a; color: white; padding: 10px 22px;
+      border-radius: 8px; font-size: 0.9rem; font-weight: 500;
+      z-index: 300; display: none; white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .toast.show { display: block; }
+    .preview-box {
+      margin-top: 14px; padding: 12px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+    }
+    .preview-row {
+      display: flex; justify-content: space-between;
+      align-items: center; font-size: 0.85rem;
+    }
+    .preview-row + .preview-row { margin-top: 6px; }
+    .preview-label { color: rgba(255,255,255,0.5); }
+    .chart-container { position: relative; height: 240px; }
+    .install-prompt {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(255,255,255,0.95); color: #1e3a5f;
+      padding: 12px 20px; border-radius: 10px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      display: none; z-index: 1000; max-width: 90%;
+      align-items: center; gap: 12px;
+    }
+    .install-prompt.show { display: flex; }
+  </style>
+</head>
+<body class="text-white p-4">
+
+  <div id="installPrompt" class="install-prompt">
+    <span style="font-size:0.9rem;">⛽ Install for quick access at the pump!</span>
+    <button id="installBtn" class="btn-primary" style="padding:6px 14px;white-space:nowrap;">Install</button>
+    <button onclick="document.getElementById('installPrompt').classList.remove('show')"
+            style="background:#1e3a5f;color:white;border:none;padding:6px 12px;
+                   border-radius:6px;cursor:pointer;">Later</button>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Delete Modal -->
+  <div id="deleteModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:10px;">Delete this entry?</h3>
+      <p style="font-size:0.85rem;color:rgba(255,255,255,0.55);margin-bottom:20px;">This cannot be undone.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+        <button class="btn-primary" style="background:#dc2626;" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Import Confirm Modal -->
+  <div id="importModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:10px;">📥 Import Excel File</h3>
+      <p id="importSummary" style="font-size:0.85rem;color:rgba(255,255,255,0.7);margin-bottom:6px;"></p>
+      <p style="font-size:0.8rem;color:rgba(255,255,255,0.45);margin-bottom:6px;">Expected columns: <strong style="color:rgba(255,255,255,0.7);">date, odometer, mileage, price per gallon, gallons</strong></p>
+      <div id="importSkipped" style="display:none;font-size:0.78rem;color:#fca5a5;margin-bottom:6px;"></div>
+      <div id="importPreview" style="max-height:160px;overflow-y:auto;margin-bottom:14px;background:rgba(0,0,0,0.2);border-radius:8px;padding:8px;font-size:0.75rem;font-family:monospace;color:rgba(255,255,255,0.6);"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <input type="checkbox" id="importMerge" style="width:auto;padding:0;background:transparent!important;border:none!important;">
+        <label for="importMerge" style="font-size:0.82rem;color:rgba(255,255,255,0.65);margin:0;cursor:pointer;">Merge with existing entries (skip duplicates)</label>
+      </div>
+      <p style="font-size:0.75rem;color:rgba(255,255,255,0.35);margin-bottom:16px;">Unchecked = replace all data. Checked = add new rows only, skipping any with matching date + odometer.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn-secondary" onclick="closeImportModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmImport()">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clear All Modal -->
+  <div id="clearModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:10px;">🗑 Clear All Data?</h3>
+      <p style="font-size:0.85rem;color:rgba(255,255,255,0.65);margin-bottom:6px;">
+        This will permanently delete all <span id="clearCount"></span> fill-up entries.
+      </p>
+      <p style="font-size:0.8rem;color:#fca5a5;margin-bottom:20px;">
+        This cannot be undone. Export your data first if you want a backup.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn-secondary" onclick="closeClearModal()">Cancel</button>
+        <button class="btn-primary" style="background:#dc2626;" onclick="confirmClear()">Delete Everything</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add/Edit Modal -->
+  <div id="addModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h3 id="modalTitle" style="font-size:1.1rem;font-weight:700;margin-bottom:18px;">Add Fill-up</h3>
+      <input type="hidden" id="editId">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <label>Date *</label>
+          <input type="date" id="fDate">
+        </div>
+        <div>
+          <label>Odometer (mi) *</label>
+          <input type="number" id="fOdometer" placeholder="e.g. 45231" step="1" min="0">
+        </div>
+        <div>
+          <label>Miles Driven *</label>
+          <input type="number" id="fMiles" placeholder="e.g. 322" step="1" min="0">
+        </div>
+        <div style="grid-column:2;visibility:hidden;"></div>
+        <div>
+          <label>Gallons *</label>
+          <input type="number" id="fGallons" placeholder="e.g. 8.5" step="0.001" min="0">
+        </div>
+        <div>
+          <label>Price / gallon ($) *</label>
+          <input type="number" id="fPpg" placeholder="e.g. 4.25" step="0.001" min="0">
+        </div>
+        <div style="grid-column:1/-1;">
+          <label>Notes (optional)</label>
+          <input type="text" id="fNotes" placeholder="e.g. partial fill, highway trip">
+        </div>
+      </div>
+
+      <div id="preview" class="preview-box" style="display:none;">
+        <div class="preview-row">
+          <span class="preview-label">Total cost</span>
+          <span id="prevCost" style="font-weight:600;"></span>
+        </div>
+        <div class="preview-row">
+          <span class="preview-label">Estimated MPG</span>
+          <span id="prevMpg" style="font-weight:600;"></span>
+        </div>
+        <div class="preview-row" id="prevMilesRow" style="display:none;">
+          <span class="preview-label">Miles since last fill</span>
+          <span id="prevMiles" style="font-weight:600;"></span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn-secondary" onclick="closeAddModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveFillup()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div style="max-width:680px;margin:0 auto;">
+
+    <div class="card rounded-xl p-4 mb-4">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;
+                  gap:10px;flex-wrap:wrap;">
+        <div>
+          <h1 style="font-size:1.4rem;font-weight:700;">⛽ 2012 Prius V</h1>
+          <p id="headerSub" style="font-size:0.8rem;color:rgba(255,255,255,0.5);margin-top:3px;">
+            Loading…
+          </p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-secondary" onclick="exportExcel()">📊 Export</button>
+          <button class="btn-secondary" onclick="document.getElementById('importFile').click()">📥 Import</button>
+          <input type="file" id="importFile" accept=".xlsx,.xls"
+                 style="display:none;" onchange="handleImportFile(event)">
+          <button class="btn-danger" style="padding:8px 14px;font-size:0.85rem;" onclick="openClearModal()">🗑 Clear All</button>
+          <button class="btn-primary" onclick="openAddModal()">+ Fill-up</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:14px;
+                  border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">
+        <button class="tab-btn active" id="tab-log"   onclick="switchTab('log')">📋 Log</button>
+        <button class="tab-btn"        id="tab-stats" onclick="switchTab('stats')">📈 Stats</button>
+      </div>
+    </div>
+
+    <div id="view-log">
+      <div id="logList"></div>
+      <div id="emptyState" class="card rounded-xl p-10 text-center" style="display:none;">
+        <div style="font-size:2.5rem;">⛽</div>
+        <p style="margin-top:10px;color:rgba(255,255,255,0.65);">No fill-ups logged yet</p>
+        <p style="font-size:0.8rem;color:rgba(255,255,255,0.35);margin-top:4px;">
+          Tap "+ Fill-up" to add your first entry
+        </p>
+      </div>
+    </div>
+
+    <div id="view-stats" style="display:none;">
+      <div id="statsContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'priusv_gaslog_v1';
+    function loadEntries() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+      catch(e) { return []; }
+    }
+    function saveEntries(arr) { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); }
+
+    let entries = loadEntries();
+    let currentTab = 'log';
+    let deleteTargetId = null;
+    let mpgChartInstance = null;
+
+    // PWA
+    if ('serviceWorker' in navigator)
+      window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault(); deferredPrompt = e;
+      document.getElementById('installPrompt').classList.add('show');
+    });
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt(); await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('installPrompt').classList.remove('show');
+    });
+    window.addEventListener('appinstalled', () =>
+      document.getElementById('installPrompt').classList.remove('show'));
+
+    // Tabs
+    function switchTab(tab) {
+      currentTab = tab;
+      document.getElementById('view-log').style.display   = tab === 'log'   ? 'block' : 'none';
+      document.getElementById('view-stats').style.display = tab === 'stats' ? 'block' : 'none';
+      document.getElementById('tab-log').className   = 'tab-btn' + (tab === 'log'   ? ' active' : '');
+      document.getElementById('tab-stats').className = 'tab-btn' + (tab === 'stats' ? ' active' : '');
+      if (tab === 'stats') renderStats();
+    }
+
+    // Data helpers
+    function sortedByDate() {
+      return [...entries].sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+    function computeMpg(sorted, idx) {
+      if (idx === 0) return null;
+      const e = sorted[idx];
+      // Use stored miles from import if available, otherwise calculate from odometer
+      const miles = (e.importedMiles != null && e.importedMiles > 0)
+        ? e.importedMiles
+        : e.odometer - sorted[idx-1].odometer;
+      if (miles <= 0 || e.gallons <= 0) return null;
+      return miles / e.gallons;
+    }
+    function enriched() {
+      const sorted = sortedByDate();
+      return sorted.map((e, i) => ({
+        ...e,
+        mpg:       computeMpg(sorted, i),
+        miles:     (e.importedMiles != null && e.importedMiles > 0)
+          ? e.importedMiles
+          : (i === 0 ? null : e.odometer - sorted[i-1].odometer),
+        totalCost: +(e.gallons * e.ppg).toFixed(2),
+      }));
+    }
+    function mpgClass(mpg) {
+      if (mpg === null) return '';
+      if (mpg >= 50) return 'mpg-great';
+      if (mpg >= 44) return 'mpg-good';
+      if (mpg >= 38) return 'mpg-ok';
+      return 'mpg-low';
+    }
+    function borderColor(mpg) {
+      if (mpg === null) return 'rgba(255,255,255,0.15)';
+      if (mpg >= 50) return '#34d399';
+      if (mpg >= 44) return '#4ade80';
+      if (mpg >= 38) return '#facc15';
+      return '#f87171';
+    }
+    function fmt(n, dec = 1) {
+      return (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(dec);
+    }
+    function fmtDate(dateStr) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return new Date(y, m-1, d).toLocaleDateString('en-US',
+        { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // Header
+    function updateHeader() {
+      const el = document.getElementById('headerSub');
+      if (entries.length === 0) { el.textContent = 'No entries yet'; return; }
+      const data = enriched();
+      const mpgs = data.filter(e => e.mpg !== null).map(e => e.mpg);
+      const avgMpg = mpgs.length
+        ? (mpgs.reduce((a,b) => a+b, 0) / mpgs.length).toFixed(1) : '—';
+      const totalMiles = data.length > 1
+        ? (data[data.length-1].odometer - data[0].odometer).toLocaleString() : '—';
+      el.textContent =
+        `${entries.length} fill-ups  •  Avg ${avgMpg} MPG  •  ${totalMiles} mi tracked`;
+    }
+
+    // Render log
+    function renderLog() {
+      const list  = document.getElementById('logList');
+      const empty = document.getElementById('emptyState');
+      if (entries.length === 0) {
+        list.innerHTML = ''; empty.style.display = 'block'; updateHeader(); return;
+      }
+      empty.style.display = 'none';
+      const data = enriched().reverse();
+      list.innerHTML = data.map(e => {
+        const mpgStr = e.mpg !== null ? fmt(e.mpg) + ' MPG' : '—';
+        const miStr  = e.miles !== null ? `+${e.miles.toLocaleString()} mi` : 'first entry';
+        return `
+          <div class="card rounded-xl p-3 mb-2"
+               style="border-left:4px solid ${borderColor(e.mpg)};">
+            <div style="display:flex;align-items:flex-start;
+                        justify-content:space-between;gap:8px;">
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <span style="font-weight:700;font-size:0.95rem;">${fmtDate(e.date)}</span>
+                  <span class="${mpgClass(e.mpg)}"
+                        style="font-weight:700;font-size:1rem;">${mpgStr}</span>
+                  <span style="font-size:0.75rem;color:rgba(255,255,255,0.4);">${miStr}</span>
+                </div>
+                <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap;">
+                  <span style="font-size:0.8rem;color:rgba(255,255,255,0.6);">
+                    🔢 ${e.odometer.toLocaleString()} mi
+                  </span>
+                  <span style="font-size:0.8rem;color:rgba(255,255,255,0.6);">
+                    ⛽ ${fmt(e.gallons, 3)} gal
+                  </span>
+                  <span style="font-size:0.8rem;color:rgba(255,255,255,0.6);">
+                    💵 $${fmt(e.ppg, 3)}/gal
+                  </span>
+                </div>
+                ${e.notes
+                  ? `<div style="font-size:0.75rem;color:rgba(255,255,255,0.38);
+                                 margin-top:5px;font-style:italic;">${e.notes}</div>`
+                  : ''}
+              </div>
+              <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+                <button class="btn-secondary"
+                        style="padding:4px 10px;font-size:0.75rem;"
+                        onclick="openEditModal('${e.id}')">Edit</button>
+                <button class="btn-danger"
+                        onclick="openDeleteModal('${e.id}')">Delete</button>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+      updateHeader();
+    }
+
+    // Render stats
+    function renderStats() {
+      const data  = enriched();
+      const mpgs  = data.filter(e => e.mpg !== null).map(e => e.mpg);
+      const totalMiles = data.length > 1
+        ? data[data.length-1].odometer - data[0].odometer : null;
+      const totalCost = data.reduce((a, e) => a + e.totalCost, 0);
+      const avgMpg    = mpgs.length ? mpgs.reduce((a,b)=>a+b,0)/mpgs.length : null;
+      const bestMpg   = mpgs.length ? Math.max(...mpgs) : null;
+      const worstMpg  = mpgs.length ? Math.min(...mpgs) : null;
+      const costPerMile = totalMiles && totalMiles > 0 ? totalCost / totalMiles : null;
+
+      document.getElementById('statsContent').innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">
+          <div class="stat-card" style="grid-column:1/-1;">
+            <div class="stat-value ${mpgClass(avgMpg)}" style="font-size:2.4rem;">
+              ${fmt(avgMpg)}
+            </div>
+            <div class="stat-label">Average MPG</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value mpg-great">${fmt(bestMpg)}</div>
+            <div class="stat-label">Best MPG</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value mpg-low">${fmt(worstMpg)}</div>
+            <div class="stat-label">Worst MPG</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">
+              ${costPerMile !== null ? '$' + fmt(costPerMile, 3) : '—'}
+            </div>
+            <div class="stat-label">Cost per Mile</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">
+              ${totalMiles !== null ? totalMiles.toLocaleString() : '—'}
+            </div>
+            <div class="stat-label">Miles Tracked</div>
+          </div>
+        </div>
+
+        ${mpgs.length >= 2 ? `
+        <div class="card rounded-xl p-4 mb-4">
+          <div style="display:flex;justify-content:space-between;
+                      align-items:center;margin-bottom:12px;">
+            <h3 style="font-size:0.9rem;font-weight:700;
+                       color:rgba(255,255,255,0.85);">MPG Over Time</h3>
+            <span style="font-size:0.72rem;color:rgba(255,255,255,0.38);">
+              Dashed = 3-fill rolling avg
+            </span>
+          </div>
+          <div class="chart-container">
+            <canvas id="mpgChart"></canvas>
+          </div>
+        </div>` : `
+        <div class="card rounded-xl p-6 text-center mb-4">
+          <p style="color:rgba(255,255,255,0.4);font-size:0.85rem;">
+            Add at least 2 fill-ups to see the MPG chart
+          </p>
+        </div>`}
+
+        ${data.length >= 2 ? `
+        <div class="card rounded-xl p-4 mb-4">
+          <h3 style="font-size:0.9rem;font-weight:700;
+                     color:rgba(255,255,255,0.85);margin-bottom:12px;">
+            MPG per Fill-up
+          </h3>
+          <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+            <thead>
+              <tr style="color:rgba(255,255,255,0.4);
+                         border-bottom:1px solid rgba(255,255,255,0.1);">
+                <th style="text-align:left;padding:6px 8px;font-weight:500;">Date</th>
+                <th style="text-align:right;padding:6px 8px;font-weight:500;">Odometer</th>
+                <th style="text-align:right;padding:6px 8px;font-weight:500;">Miles</th>
+                <th style="text-align:right;padding:6px 8px;font-weight:500;">Gallons</th>
+                <th style="text-align:right;padding:6px 8px;font-weight:500;">MPG</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[...data].reverse().map((e, i) => `
+                <tr style="border-bottom:1px solid rgba(255,255,255,0.05);
+                           ${i % 2 === 1 ? 'background:rgba(255,255,255,0.03);' : ''}">
+                  <td style="padding:7px 8px;color:rgba(255,255,255,0.7);">
+                    ${fmtDate(e.date)}
+                  </td>
+                  <td style="padding:7px 8px;text-align:right;
+                             color:rgba(255,255,255,0.55);">
+                    ${e.odometer.toLocaleString()}
+                  </td>
+                  <td style="padding:7px 8px;text-align:right;
+                             color:rgba(255,255,255,0.55);">
+                    ${e.miles !== null ? '+' + e.miles.toLocaleString() : '—'}
+                  </td>
+                  <td style="padding:7px 8px;text-align:right;
+                             color:rgba(255,255,255,0.55);">
+                    ${fmt(e.gallons, 3)}
+                  </td>
+                  <td style="padding:7px 8px;text-align:right;font-weight:700;"
+                      class="${mpgClass(e.mpg)}">
+                    ${e.mpg !== null ? fmt(e.mpg) : '—'}
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
+      `;
+
+      if (mpgs.length >= 2) {
+        requestAnimationFrame(() => {
+          const chartData = data.filter(e => e.mpg !== null);
+          const ctx = document.getElementById('mpgChart');
+          if (!ctx) return;
+          if (mpgChartInstance) { mpgChartInstance.destroy(); mpgChartInstance = null; }
+
+          const rolling = chartData.map((_, i, arr) => {
+            if (i < 2) return null;
+            const slice = arr.slice(i-2, i+1).map(e => e.mpg);
+            return +(slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(1);
+          });
+
+          mpgChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+              labels: chartData.map(e => fmtDate(e.date)),
+              datasets: [
+                {
+                  label: 'MPG',
+                  data: chartData.map(e => +fmt(e.mpg)),
+                  borderColor: '#60a5fa',
+                  backgroundColor: 'rgba(96,165,250,0.12)',
+                  borderWidth: 2.5,
+                  pointBackgroundColor: chartData.map(e => borderColor(e.mpg)),
+                  pointRadius: 5, pointHoverRadius: 7,
+                  tension: 0.3, fill: true,
+                },
+                {
+                  label: '3-fill avg',
+                  data: rolling,
+                  borderColor: 'rgba(250,204,21,0.65)',
+                  borderWidth: 1.5, borderDash: [5,4],
+                  pointRadius: 0, tension: 0.4,
+                  fill: false, spanGaps: true,
+                }
+              ]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: {
+                  display: true,
+                  labels: { color: 'rgba(255,255,255,0.45)', font: { size: 11 }, boxWidth: 20 }
+                },
+                tooltip: {
+                  callbacks: {
+                    label: ctx => ctx.raw === null ? null : ` ${ctx.dataset.label}: ${ctx.raw} MPG`
+                  }
+                }
+              },
+              scales: {
+                x: { ticks: { color: 'rgba(255,255,255,0.4)', maxRotation: 45, font: { size: 10 } },
+                     grid:  { color: 'rgba(255,255,255,0.05)' } },
+                y: { ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
+                     grid:  { color: 'rgba(255,255,255,0.05)' } }
+              }
+            }
+          });
+        });
+      }
+    }
+
+    // Modal
+    function openAddModal() {
+      document.getElementById('modalTitle').textContent = 'Add Fill-up';
+      document.getElementById('editId').value = '';
+      document.getElementById('fDate').value = new Date().toISOString().split('T')[0];
+      ['fOdometer','fMiles','fGallons','fPpg','fNotes'].forEach(id =>
+        document.getElementById(id).value = '');
+      document.getElementById('preview').style.display = 'none';
+      document.getElementById('addModal').style.display = 'flex';
+    }
+    function openEditModal(id) {
+      const e = entries.find(x => x.id === id);
+      if (!e) return;
+      document.getElementById('modalTitle').textContent = 'Edit Fill-up';
+      document.getElementById('editId').value    = id;
+      document.getElementById('fDate').value     = e.date;
+      document.getElementById('fOdometer').value = e.odometer;
+      document.getElementById('fMiles').value    = e.importedMiles || '';
+      document.getElementById('fGallons').value  = e.gallons;
+      document.getElementById('fPpg').value      = e.ppg;
+      document.getElementById('fNotes').value    = e.notes || '';
+      updatePreview();
+      document.getElementById('addModal').style.display = 'flex';
+    }
+    function closeAddModal() { document.getElementById('addModal').style.display = 'none'; }
+
+    function updatePreview() {
+      const gallons = parseFloat(document.getElementById('fGallons').value);
+      const ppg     = parseFloat(document.getElementById('fPpg').value);
+      const odo     = parseFloat(document.getElementById('fOdometer').value);
+      const prev    = document.getElementById('preview');
+      if (gallons > 0 && ppg > 0) {
+        document.getElementById('prevCost').textContent = '$' + (gallons * ppg).toFixed(2);
+        const manualMiles = parseFloat(document.getElementById('fMiles').value);
+        if (manualMiles > 0) {
+          document.getElementById('prevMpg').textContent   = (manualMiles / gallons).toFixed(1);
+          document.getElementById('prevMiles').textContent = manualMiles.toLocaleString() + ' mi';
+          document.getElementById('prevMilesRow').style.display = 'flex';
+        } else {
+          const editId = document.getElementById('editId').value;
+          const last   = sortedByDate().filter(e => e.id !== editId).pop();
+          if (last && odo > last.odometer) {
+            const miles = odo - last.odometer;
+            document.getElementById('prevMpg').textContent   = (miles / gallons).toFixed(1);
+            document.getElementById('prevMiles').textContent = miles.toLocaleString() + ' mi';
+            document.getElementById('prevMilesRow').style.display = 'flex';
+          } else {
+            document.getElementById('prevMpg').textContent = '—';
+            document.getElementById('prevMilesRow').style.display = 'none';
+          }
+        }
+        prev.style.display = 'block';
+      } else {
+        prev.style.display = 'none';
+      }
+    }
+    ['fGallons','fPpg','fOdometer','fMiles'].forEach(id =>
+      document.getElementById(id).addEventListener('input', updatePreview));
+
+    function saveFillup() {
+      const date          = document.getElementById('fDate').value;
+      const odometer      = parseFloat(document.getElementById('fOdometer').value);
+      const manualMiles   = parseFloat(document.getElementById('fMiles').value);
+      const gallons       = parseFloat(document.getElementById('fGallons').value);
+      const ppg           = parseFloat(document.getElementById('fPpg').value);
+      const notes         = document.getElementById('fNotes').value.trim();
+      const editId        = document.getElementById('editId').value;
+      if (!date || isNaN(odometer) || isNaN(gallons) || isNaN(ppg)) {
+        showToast('Please fill in all required fields.', 'error'); return;
+      }
+      if (gallons <= 0 || ppg <= 0 || odometer <= 0) {
+        showToast('Values must be greater than zero.', 'error'); return;
+      }
+      const importedMiles = (manualMiles > 0 && !isNaN(manualMiles)) ? manualMiles : null;
+      const entry = { id: editId || Date.now().toString(), date, odometer, gallons, ppg, notes, importedMiles };
+      if (editId) {
+        const idx = entries.findIndex(e => e.id === editId);
+        if (idx !== -1) entries[idx] = entry;
+      } else {
+        entries.push(entry);
+      }
+      saveEntries(entries);
+      closeAddModal();
+      renderLog();
+      if (currentTab === 'stats') renderStats();
+      showToast(editId ? 'Entry updated!' : 'Fill-up saved!');
+    }
+
+    // Delete
+    function openDeleteModal(id) {
+      deleteTargetId = id;
+      document.getElementById('deleteModal').style.display = 'flex';
+    }
+    function closeDeleteModal() {
+      deleteTargetId = null;
+      document.getElementById('deleteModal').style.display = 'none';
+    }
+    function confirmDelete() {
+      if (!deleteTargetId) return;
+      entries = entries.filter(e => e.id !== deleteTargetId);
+      saveEntries(entries);
+      closeDeleteModal();
+      renderLog();
+      if (currentTab === 'stats') renderStats();
+      showToast('Entry deleted.');
+    }
+
+    // Toast
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.background = type === 'error' ? '#dc2626' : '#16a34a';
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    // Excel export
+    function exportExcel() {
+      if (entries.length === 0) { showToast('No data to export.', 'error'); return; }
+      const data = enriched();
+      const rows = data.map(e => ({
+        'Date':           e.date,
+        'Odometer (mi)':  e.odometer,
+        'Miles Driven':   e.miles ?? '',
+        'Gallons':        e.gallons,
+        'Price/Gal ($)':  e.ppg,
+        'Total Cost ($)': e.totalCost,
+        'MPG':            e.mpg !== null ? +fmt(e.mpg) : '',
+        'Notes':          e.notes || '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{wch:12},{wch:14},{wch:13},{wch:10},{wch:13},{wch:13},{wch:8},{wch:28}];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Gas Log');
+
+      const mpgs = data.filter(e=>e.mpg!==null).map(e=>e.mpg);
+      const totalMiles = data.length>1 ? data[data.length-1].odometer - data[0].odometer : 0;
+      const totalCost  = data.reduce((a,e)=>a+e.totalCost,0);
+      const ws2 = XLSX.utils.aoa_to_sheet([
+        ['2012 Prius V — Gas Log Summary'], [],
+        ['Metric','Value'],
+        ['Total Fill-ups', data.length],
+        ['Miles Tracked', totalMiles],
+        ['Average MPG', mpgs.length ? +(mpgs.reduce((a,b)=>a+b,0)/mpgs.length).toFixed(1) : ''],
+        ['Best MPG',    mpgs.length ? +Math.max(...mpgs).toFixed(1) : ''],
+        ['Worst MPG',   mpgs.length ? +Math.min(...mpgs).toFixed(1) : ''],
+        ['Cost per Mile ($)', totalMiles > 0 ? +(totalCost/totalMiles).toFixed(4) : ''],
+        ['Total Gallons', +data.reduce((a,e)=>a+e.gallons,0).toFixed(3)],
+      ]);
+      ws2['!cols'] = [{wch:22},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+      XLSX.writeFile(wb, `prius-v-gas-log-${new Date().toISOString().split('T')[0]}.xlsx`);
+      showToast('Exported!');
+    }
+
+
+    // ── Import ────────────────────────────────────────────────────────────────
+    let pendingImport = [];
+
+    function normalizeHeader(h) {
+      return String(h).toLowerCase().trim()
+        .replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
+    function findCol(headers, ...candidates) {
+      // Exact match first
+      for (const c of candidates) {
+        const idx = headers.findIndex(h => normalizeHeader(h) === c);
+        if (idx !== -1) return idx;
+      }
+      // Contains match
+      for (const c of candidates) {
+        const idx = headers.findIndex(h => normalizeHeader(h).includes(c));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    }
+
+    // Special fuzzy finder for price/gallon — matches any header containing
+    // "price", "ppg", "per gal", "/gal", "cost", etc.
+    function findPpgCol(headers) {
+      const patterns = ['ppg', 'per gal', 'price', 'cost per', 'unit price', 'p p g'];
+      for (const p of patterns) {
+        const idx = headers.findIndex(h => normalizeHeader(h).includes(p));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    }
+
+    function parseExcelDate(val) {
+      // Excel serial number
+      if (typeof val === 'number') {
+        const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+        return d.toISOString().split('T')[0];
+      }
+      // String date — normalise to YYYY-MM-DD
+      if (typeof val === 'string') {
+        const s = val.trim();
+        // already ISO
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        // M/D/YYYY or MM/DD/YYYY
+        const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+        if (m) {
+          const yr = m[3].length === 2 ? '20' + m[3] : m[3];
+          return `${yr}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+        }
+      }
+      return null;
+    }
+
+    function handleImportFile(event) {
+      const file = event.target.files[0];
+      event.target.value = ''; // reset so same file can be re-selected
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const wb   = XLSX.read(e.target.result, { type: 'array' });
+          const ws   = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+          if (rows.length < 2) {
+            showToast('File appears to be empty.', 'error'); return;
+          }
+
+          const headers = rows[0].map(String);
+          const colDate = findCol(headers, 'date');
+          const colOdo  = findCol(headers, 'odometer');
+          const colGal  = findCol(headers, 'gallons');
+          const colPpg  = findPpgCol(headers);
+
+          const missing = [];
+          if (colDate === -1) missing.push('date');
+          if (colOdo  === -1) missing.push('odometer');
+          if (colGal  === -1) missing.push('gallons');
+          if (colPpg  === -1) missing.push('price per gallon');
+
+          if (missing.length) {
+            const found = headers.map(normalizeHeader).join(' | ');
+            showToast('Cannot find: ' + missing.join(', ') + '. Headers found: ' + found, 'error');
+            console.error('Headers in file:', headers);
+            return;
+          }
+
+          const colMiles = findCol(headers, 'mileage', 'miles', 'miles driven', 'distance');
+          const colNotes = findCol(headers, 'notes', 'note', 'comments');
+
+          let imported = [];
+          let skipped  = 0;
+
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            // skip blank rows
+            if (row.every(c => c === '' || c === null || c === undefined)) continue;
+
+            const date     = parseExcelDate(row[colDate]);
+            const odometer = parseFloat(row[colOdo]);
+            const gallons  = parseFloat(row[colGal]);
+            const ppg      = parseFloat(row[colPpg]);
+            const notes        = colNotes !== -1 ? String(row[colNotes] || '').trim() : '';
+            const importedMiles = colMiles !== -1 ? parseFloat(row[colMiles]) : null;
+
+            if (!date || isNaN(odometer) || isNaN(gallons) || isNaN(ppg)
+                || odometer <= 0 || gallons <= 0 || ppg <= 0) {
+              skipped++;
+              continue;
+            }
+
+            imported.push({
+              id:       `import_${date}_${odometer}`,
+              date, odometer, gallons, ppg, notes,
+              importedMiles: (importedMiles > 0 && !isNaN(importedMiles)) ? importedMiles : null
+            });
+          }
+
+          if (imported.length === 0) {
+            showToast('No valid rows found in file.', 'error'); return;
+          }
+
+          pendingImport = imported;
+
+          // Populate modal
+          document.getElementById('importSummary').textContent =
+            `Found ${imported.length} valid row${imported.length !== 1 ? 's' : ''} in "${file.name}".`;
+
+          const skipEl = document.getElementById('importSkipped');
+          if (skipped > 0) {
+            skipEl.textContent = `⚠️ ${skipped} row${skipped !== 1 ? 's' : ''} skipped (missing or invalid data).`;
+            skipEl.style.display = 'block';
+          } else {
+            skipEl.style.display = 'none';
+          }
+
+          // Preview first 5 rows
+          const preview = imported.slice(0, 5).map(r =>
+            `${r.date}  |  ${r.odometer.toLocaleString()} mi  |  ${r.gallons} gal  |  $${r.ppg}/gal`
+          ).join('\n');
+          document.getElementById('importPreview').textContent =
+            preview + (imported.length > 5 ? `\n… and ${imported.length - 5} more` : '');
+
+          document.getElementById('importMerge').checked = entries.length > 0;
+          document.getElementById('importModal').style.display = 'flex';
+
+        } catch(err) {
+          console.error(err);
+          showToast('Could not read file. Make sure it is a valid .xlsx file.', 'error');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function closeImportModal() {
+      pendingImport = [];
+      document.getElementById('importModal').style.display = 'none';
+    }
+
+    function confirmImport() {
+      if (pendingImport.length === 0) return;
+      const merge = document.getElementById('importMerge').checked;
+
+      if (merge) {
+        // Build a set of existing date+odometer keys to detect duplicates
+        const existing = new Set(entries.map(e => `${e.date}_${e.odometer}`));
+        const newRows  = pendingImport.filter(r => !existing.has(`${r.date}_${r.odometer}`));
+        // Re-ID to avoid collisions
+        newRows.forEach(r => { r.id = Date.now().toString() + Math.random().toString(36).slice(2); });
+        entries = [...entries, ...newRows];
+        saveEntries(entries);
+        closeImportModal();
+        renderLog();
+        if (currentTab === 'stats') renderStats();
+        showToast(`Imported ${newRows.length} new entries.`);
+      } else {
+        // Replace all — assign fresh IDs
+        pendingImport.forEach(r => {
+          r.id = Date.now().toString() + Math.random().toString(36).slice(2);
+        });
+        entries = pendingImport;
+        saveEntries(entries);
+        closeImportModal();
+        renderLog();
+        if (currentTab === 'stats') renderStats();
+        showToast(`Imported ${entries.length} entries.`);
+      }
+      pendingImport = [];
+    }
+
+
+    // ── Clear All ─────────────────────────────────────────────────────────────
+    function openClearModal() {
+      if (entries.length === 0) { showToast('Nothing to clear.', 'error'); return; }
+      document.getElementById('clearCount').textContent =
+        entries.length + ' fill-up' + (entries.length !== 1 ? 's' : '');
+      document.getElementById('clearModal').style.display = 'flex';
+    }
+    function closeClearModal() {
+      document.getElementById('clearModal').style.display = 'none';
+    }
+    function confirmClear() {
+      entries = [];
+      saveEntries(entries);
+      closeClearModal();
+      renderLog();
+      if (currentTab === 'stats') renderStats();
+      showToast('All data cleared.');
+    }
+
+    // Backdrop close
+    ['addModal','deleteModal','importModal','clearModal'].forEach(id => {
+      document.getElementById(id).addEventListener('click', e => {
+        if (e.target === document.getElementById(id))
+          if (id === 'addModal') closeAddModal();
+          else if (id === 'deleteModal') closeDeleteModal();
+          else if (id === 'importModal') closeImportModal();
+          else closeClearModal();
+      });
+    });
+
+    renderLog();
+  </script>
+</body>
+</html>
